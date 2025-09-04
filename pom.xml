@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- 父工程：Spring Boot 2.7.x 稳定版（适配 JDK 11） -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.7.18</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.demo</groupId>
+    <artifactId>app-demo</artifactId>
+    <version>1.0.0</version>
+    <name>app-demo</name>
+    <description>Spring Boot 应用（适配 CI/CD 流水线 + MySQL + Redis）</description>
+
+    <properties>
+        <java.version>11</java.version>
+        <springdoc.version>1.6.15</springdoc.version> <!-- Swagger 3 依赖版本 -->
+    </properties>
+
+    <dependencies>
+        <!-- 1. Spring Boot 核心依赖 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId> <!-- Web 功能（接口） -->
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId> <!-- 健康检查、监控 -->
+        </dependency>
+
+        <!-- 2. MySQL 依赖（操作数据库） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId> <!-- JPA 简化数据库操作 -->
+        </dependency>
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
+            <version>8.0.33</version>
+            <scope>runtime</scope> <!-- 运行时依赖 -->
+        </dependency>
+
+        <!-- 3. Redis 依赖（缓存） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId> <!-- Redis 连接池 -->
+        </dependency>
+
+        <!-- 4. Swagger 3（接口文档，方便测试） -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-ui</artifactId>
+            <version>${springdoc.version}</version>
+        </dependency>
+
+        <!-- 5. 工具类（简化开发） -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional> <!-- 编译时依赖，减少包体积 -->
+        </dependency>
+    </dependencies>
+
+    <!-- 构建配置：确保打包成可执行 JAR，且路径匹配 Dockerfile -->
+    <build>
+        <finalName>app-demo</finalName> <!-- 打包后的 JAR 名：app-demo.jar -->
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

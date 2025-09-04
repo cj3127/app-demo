@@ -205,8 +205,14 @@ pipeline {
             // emailext to: 'dev-team@example.com', subject: '❌ 构建失败: app-demo #${BUILD_NUMBER}', body: '构建详情: ${BUILD_URL}'
         }
         always {
-            // 无论成功失败都执行的操作
-            echo "流水线执行结束，时间：${currentBuild.resultTime}"
+            echo "======================================"
+            echo "❌ CI/CD 流水线执行失败！"
+            echo "构建编号：${currentBuild.number}"
+            echo "构建地址：${env.BUILD_URL}"
+            echo "构建结果：${currentBuild.result}"  // 修正为合法字段
+            echo "构建开始时间：${currentBuild.startTime}"  // 可选，按需添加
+            echo "请查看日志排查问题"
+            echo "======================================"
         }
     }
 }

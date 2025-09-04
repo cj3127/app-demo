@@ -1,0 +1,22 @@
+version: '3.8'
+services:
+  app-demo:
+    # 镜像地址（Harbor 仓库 + 镜像名 + 标签，标签由 Jenkins 动态生成）
+    image: 192.168.121.210/app-demo/app-demo:${IMAGE_TAG}
+    container_name: app-demo
+    restart: always  # 容器异常自动重启
+    ports:
+      - "8080:8080"  # 宿主机端口:容器端口（与应用端口一致）
+    environment:
+      # 应用配置（对接现有 MySQL/Redis）
+      - SPRING_DATASOURCE_URL=jdbc:mysql://192.168.121.188:3306/app_demo?useSSL=false&serverTimezone=UTC
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=123456
+      - SPRING_REDIS_HOST=192.168.121.171
+      - SPRING_REDIS_PORT=6379
+    # 健康检查（确保应用启动成功）
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]  # 需应用有健康检查接口
+      interval: 30s
+      timeout: 10s
+      retries: 3

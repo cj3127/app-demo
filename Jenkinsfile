@@ -206,7 +206,7 @@ pipeline {
         }
         always {
             // 无论成功失败都执行的操作
-            echo "流水线执行结束，时间：${currentBuild.endTime}"
+            echo "流水线执行结束，时间：${currentBuild.resultTime}"
         }
     }
 }

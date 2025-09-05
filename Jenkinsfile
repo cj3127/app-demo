@@ -1,18 +1,23 @@
 pipeline {
+    agent any  // 任意 Jenkins 节点执行（此处为 ci-server）
     agent any  
     environment {
+        // 全局变量（适配您的环境）
+        GIT_URL = "https://github.com/cj3127/app-demo.git"  // 您的 Git 仓库地址
         // 全局变量
-        GIT_URL = "https://github.com/cj3127/app-demo.git"  // Git 仓库地址
+        GIT_URL = "https://github.com/cj3127/app-demo.git"  //  Git 仓库地址
         GIT_BRANCH = "main"  // 代码分支
         HARBOR_URL = "192.168.121.210"  // Harbor 地址
         HARBOR_PROJECT = "app-demo"  // Harbor 项目名
         IMAGE_NAME = "app-demo"  // 镜像名
         IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT.substring(0,8)}"  // 镜像标签（构建号+Git 短提交ID）
+        APP_SERVERS = "192.168.121.80,192.168.121.81" // 目标部署节点（移除逗号后空格，避免解析问题）
         APP_SERVERS = "192.168.121.80,192.168.121.81" // 目标部署节点
         APP_DEPLOY_DIR = "/opt/app-demo"  // 应用部署目录，统一变量方便维护
     }
     stages {
         // 前置检查阶段：验证必要工具是否安装
+        stage("Pre-check") {
         stage("前置检查阶段") {
             steps {
                 script {
@@ -80,8 +85,7 @@ pipeline {
                         usernameVariable: "HARBOR_USER",
                         passwordVariable: "HARBOR_PWD"
                     )]) {
-                        // 修复：使用 --password-stdin 避免明文密码警告
-                        sh "echo ${HARBOR_PWD} | docker login ${HARBOR_URL} -u ${HARBOR_USER} --password-stdin || { echo '❌ Harbor 登录失败'; exit 1; }"
+                        sh "docker login ${HARBOR_URL} -u ${HARBOR_USER} -p ${HARBOR_PWD} || { echo '❌ Harbor 登录失败'; exit 1; }"
                     }
 
                     // 构建镜像
@@ -113,85 +117,76 @@ pipeline {
         }
 
         // 阶段5：部署到 App 服务器（多节点并行部署）
-        // 阶段5：部署到 App 服务器（多节点并行部署）
-stage("部署到 App 服务器") {
-    steps {
-        script {
-            echo "开始部署到应用服务器..."
-            // 分割服务器列表为数组并去除空格
-            def servers = APP_SERVERS.split(',').collect { it.trim() }
-            
-            // 构建并行部署任务（Map格式）
-            def deployTasks = [:]
-            servers.each { server ->
-                deployTasks["部署到 ${server}"] = {
-                    echo "开始部署到 ${server}..."
-                    withCredentials([
-                        sshUserPrivateKey(
-                            credentialsId: "app-server-ssh",
-                            keyFileVariable: "SSH_KEY",
-                            usernameVariable: "SSH_USER"
-                        ),
-                        usernamePassword(
-                            credentialsId: "harbor-cred",
-                            usernameVariable: "HARBOR_USER",
-                            passwordVariable: "HARBOR_PWD"
-                        )
-                    ]) {
-                        // SSH 远程执行部署脚本（修复注释语法）
-                        sh """
-                            ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${SSH_USER}@${server} '
-                                echo "在 ${server} 上执行部署操作..."
-                                
-                                # 1. 登录 Harbor（修复注释：// → #）
-                                echo ${HARBOR_PWD} | docker login ${HARBOR_URL} -u ${HARBOR_USER} --password-stdin || { echo "❌ Harbor 登录失败"; exit 1; }
-                                
-                                # 2. 拉取最新镜像
-                                IMAGE=${HARBOR_URL}/${HARBOR_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}
-                                echo "拉取镜像: \${IMAGE}"
-                                docker pull \${IMAGE} || { echo "❌ 镜像拉取失败"; exit 1; }
-                                
-                                # 3. 停止并删除旧容器（若存在）
-                                echo "停止并删除旧容器..."
-                                if [ \$(docker ps -q -f name=app-demo) ]; then
-                                    docker stop app-demo && docker rm app-demo || { echo "❌ 停止/删除旧容器失败"; exit 1; }
-                                fi
-                                
-                                # 4. 确保部署目录存在
-                                echo "准备部署目录..."
-                                mkdir -p ${APP_DEPLOY_DIR} || { echo "❌ 创建部署目录失败"; exit 1; }
-                                cd ${APP_DEPLOY_DIR} || { echo "❌ 进入部署目录失败"; exit 1; }
-                                
-                                # 5. 启动新容器
-                                echo "启动新容器..."
-                                IMAGE_TAG=${IMAGE_TAG} docker-compose up -d || { echo "❌ 启动容器失败"; exit 1; }
-                                
-                                # 6. 验证容器状态
-                                echo "验证容器状态..."
-                                if [ \$(docker ps -q -f name=app-demo) ]; then
-                                    echo "✅ 容器启动成功"
-                                    docker ps | grep app-demo
-                                else
-                                    echo "❌ 容器启动失败，查看日志:"
-                                    docker logs app-demo
-                                    exit 1
-                                fi
-                                
-                                # 7. 清理操作
-                                docker logout ${HARBOR_URL}
-                                docker system prune -f || true  # 清理无用镜像，释放空间
-                            '
-                        """
+        stage("部署到 App 服务器") {
+            steps {
+                script {
+                    echo "开始部署到应用服务器..."
+                    // 分割服务器列表为数组并去除空格
+                    def servers = APP_SERVERS.split(',').collect { it.trim() }
+
+                    // 遍历所有 App 服务器，并行部署
+                    parallel servers.collect { server ->
+                        [
+                            "部署到 ${server}": {
+                                echo "开始部署到 ${server}..."
+                                withCredentials([sshUserPrivateKey(
+                                    credentialsId: "app-server-ssh",
+                                    keyFileVariable: "SSH_KEY",
+                                    usernameVariable: "SSH_USER"
+                                )]) {
+                                    // SSH 连接目标服务器，执行部署命令
+                                    sh """
+                                        ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${SSH_USER}@${server} '
+                                            echo "在 ${server} 上执行部署操作..."
+                                            
+                                            // 1. 登录 Harbor
+                                            docker login ${HARBOR_URL} -u ${env.HARBOR_USER} -p ${env.HARBOR_PWD} || { echo "❌ Harbor 登录失败"; exit 1; }
+                                            
+                                            // 2. 拉取最新镜像
+                                            IMAGE=${HARBOR_URL}/${HARBOR_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}
+                                            echo "拉取镜像: \${IMAGE}"
+                                            docker pull \${IMAGE} || { echo "❌ 镜像拉取失败"; exit 1; }
+                                            
+                                            // 3. 停止并删除旧容器（若存在）
+                                            echo "停止并删除旧容器..."
+                                            if [ \$(docker ps -q -f name=app-demo) ]; then
+                                                docker stop app-demo && docker rm app-demo || { echo "❌ 停止/删除旧容器失败"; exit 1; }
+                                            fi
+                                            
+                                            // 4. 确保部署目录存在
+                                            echo "准备部署目录..."
+                                            mkdir -p ${APP_DEPLOY_DIR} || { echo "❌ 创建部署目录失败"; exit 1; }
+                                            cd ${APP_DEPLOY_DIR} || { echo "❌ 进入部署目录失败"; exit 1; }
+                                            
+                                            // 5. 启动新容器
+                                            echo "启动新容器..."
+                                            IMAGE_TAG=${IMAGE_TAG} docker-compose up -d || { echo "❌ 启动容器失败"; exit 1; }
+                                            
+                                            // 6. 验证容器状态
+                                            echo "验证容器状态..."
+                                            if [ \$(docker ps -q -f name=app-demo) ]; then
+                                                echo "✅ 容器启动成功"
+                                                docker ps | grep app-demo
+                                            else
+                                                echo "❌ 容器启动失败，查看日志:"
+                                                docker logs app-demo
+                                                exit 1
+                                            fi
+                                            
+                                            // 7. 清理操作
+                                            docker logout ${HARBOR_URL}
+                                            docker system prune -f || true  // 清理无用镜像，释放空间
+                                        '
+                                    """
+                                }
+                                echo "✅ 部署完成：${server}"
+                            }
+                        ]
                     }
-                    echo "✅ 部署完成：${server}"
                 }
             }
-            
-            // 执行并行部署
-            parallel deployTasks
         }
     }
-}
 
     // 流水线结束后操作（成功/失败通知）
     post {
@@ -215,17 +210,15 @@ stage("部署到 App 服务器") {
             // emailext to: 'dev-team@example.com', subject: '❌ 构建失败: app-demo #${BUILD_NUMBER}', body: '构建详情: ${BUILD_URL}'
         }
         always {
-            // 修复1：将 resultTime 改为 endTime（构建结束时间）
-            // 修复2：移除重复的失败提示，保持中立信息
+            // 无论成功失败都执行的操作
+            echo "流水线执行结束，时间：${currentBuild.resultTime}"
             echo "======================================"
-            echo "流水线执行结束"
+            echo "❌ CI/CD 流水线执行失败！"
             echo "构建编号：${currentBuild.number}"
             echo "构建地址：${env.BUILD_URL}"
-            echo "构建结果：${currentBuild.result}"
-            echo "构建开始时间：${currentBuild.startTime}"
-            echo "构建结束时间：${currentBuild.endTime}"  // 正确的结束时间字段
+            echo "构建结果：${currentBuild.result}"  // 修正为合法字段
+            echo "构建开始时间：${currentBuild.startTime}"  // 可选，按需添加
+            echo "请查看日志排查问题"
             echo "======================================"
         }
     }
-}
-}

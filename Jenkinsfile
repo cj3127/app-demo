@@ -113,86 +113,85 @@ pipeline {
         }
 
         // 阶段5：部署到 App 服务器（多节点并行部署）
-        stage("部署到 App 服务器") {
-            steps {
-                script {
-                    echo "开始部署到应用服务器..."
-                    // 分割服务器列表为数组并去除空格
-                    def servers = APP_SERVERS.split(',').collect { it.trim() }
-                    
-                    // 修复：将列表转换为 Map，确保 parallel 接收正确格式的参数
-                    def deployTasks = [:]
-                    servers.each { server ->
-                        deployTasks["部署到 ${server}"] = {
-                            echo "开始部署到 ${server}..."
-                            withCredentials([
-                                sshUserPrivateKey(
-                                    credentialsId: "app-server-ssh",
-                                    keyFileVariable: "SSH_KEY",
-                                    usernameVariable: "SSH_USER"
-                                ),
-                                // 修复：重新引入 Harbor 凭证，避免变量作用域问题
-                                usernamePassword(
-                                    credentialsId: "harbor-cred",
-                                    usernameVariable: "HARBOR_USER",
-                                    passwordVariable: "HARBOR_PWD"
-                                )
-                            ]) {
-                                // SSH 连接目标服务器，执行部署命令
-                                sh """
-                                    ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${SSH_USER}@${server} '
-                                        echo "在 ${server} 上执行部署操作..."
-                                        
-                                        // 1. 登录 Harbor
-                                        echo ${HARBOR_PWD} | docker login ${HARBOR_URL} -u ${HARBOR_USER} --password-stdin || { echo "❌ Harbor 登录失败"; exit 1; }
-                                        
-                                        // 2. 拉取最新镜像
-                                        IMAGE=${HARBOR_URL}/${HARBOR_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}
-                                        echo "拉取镜像: \${IMAGE}"
-                                        docker pull \${IMAGE} || { echo "❌ 镜像拉取失败"; exit 1; }
-                                        
-                                        // 3. 停止并删除旧容器（若存在）
-                                        echo "停止并删除旧容器..."
-                                        if [ \$(docker ps -q -f name=app-demo) ]; then
-                                            docker stop app-demo && docker rm app-demo || { echo "❌ 停止/删除旧容器失败"; exit 1; }
-                                        fi
-                                        
-                                        // 4. 确保部署目录存在
-                                        echo "准备部署目录..."
-                                        mkdir -p ${APP_DEPLOY_DIR} || { echo "❌ 创建部署目录失败"; exit 1; }
-                                        cd ${APP_DEPLOY_DIR} || { echo "❌ 进入部署目录失败"; exit 1; }
-                                        
-                                        // 5. 启动新容器
-                                        echo "启动新容器..."
-                                        IMAGE_TAG=${IMAGE_TAG} docker-compose up -d || { echo "❌ 启动容器失败"; exit 1; }
-                                        
-                                        // 6. 验证容器状态
-                                        echo "验证容器状态..."
-                                        if [ \$(docker ps -q -f name=app-demo) ]; then
-                                            echo "✅ 容器启动成功"
-                                            docker ps | grep app-demo
-                                        else
-                                            echo "❌ 容器启动失败，查看日志:"
-                                            docker logs app-demo
-                                            exit 1
-                                        fi
-                                        
-                                        // 7. 清理操作
-                                        docker logout ${HARBOR_URL}
-                                        docker system prune -f || true  // 清理无用镜像，释放空间
-                                    '
-                                """
-                            }
-                            echo "✅ 部署完成：${server}"
-                        }
+        // 阶段5：部署到 App 服务器（多节点并行部署）
+stage("部署到 App 服务器") {
+    steps {
+        script {
+            echo "开始部署到应用服务器..."
+            // 分割服务器列表为数组并去除空格
+            def servers = APP_SERVERS.split(',').collect { it.trim() }
+            
+            // 构建并行部署任务（Map格式）
+            def deployTasks = [:]
+            servers.each { server ->
+                deployTasks["部署到 ${server}"] = {
+                    echo "开始部署到 ${server}..."
+                    withCredentials([
+                        sshUserPrivateKey(
+                            credentialsId: "app-server-ssh",
+                            keyFileVariable: "SSH_KEY",
+                            usernameVariable: "SSH_USER"
+                        ),
+                        usernamePassword(
+                            credentialsId: "harbor-cred",
+                            usernameVariable: "HARBOR_USER",
+                            passwordVariable: "HARBOR_PWD"
+                        )
+                    ]) {
+                        // SSH 远程执行部署脚本（修复注释语法）
+                        sh """
+                            ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${SSH_USER}@${server} '
+                                echo "在 ${server} 上执行部署操作..."
+                                
+                                # 1. 登录 Harbor（修复注释：// → #）
+                                echo ${HARBOR_PWD} | docker login ${HARBOR_URL} -u ${HARBOR_USER} --password-stdin || { echo "❌ Harbor 登录失败"; exit 1; }
+                                
+                                # 2. 拉取最新镜像
+                                IMAGE=${HARBOR_URL}/${HARBOR_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}
+                                echo "拉取镜像: \${IMAGE}"
+                                docker pull \${IMAGE} || { echo "❌ 镜像拉取失败"; exit 1; }
+                                
+                                # 3. 停止并删除旧容器（若存在）
+                                echo "停止并删除旧容器..."
+                                if [ \$(docker ps -q -f name=app-demo) ]; then
+                                    docker stop app-demo && docker rm app-demo || { echo "❌ 停止/删除旧容器失败"; exit 1; }
+                                fi
+                                
+                                # 4. 确保部署目录存在
+                                echo "准备部署目录..."
+                                mkdir -p ${APP_DEPLOY_DIR} || { echo "❌ 创建部署目录失败"; exit 1; }
+                                cd ${APP_DEPLOY_DIR} || { echo "❌ 进入部署目录失败"; exit 1; }
+                                
+                                # 5. 启动新容器
+                                echo "启动新容器..."
+                                IMAGE_TAG=${IMAGE_TAG} docker-compose up -d || { echo "❌ 启动容器失败"; exit 1; }
+                                
+                                # 6. 验证容器状态
+                                echo "验证容器状态..."
+                                if [ \$(docker ps -q -f name=app-demo) ]; then
+                                    echo "✅ 容器启动成功"
+                                    docker ps | grep app-demo
+                                else
+                                    echo "❌ 容器启动失败，查看日志:"
+                                    docker logs app-demo
+                                    exit 1
+                                fi
+                                
+                                # 7. 清理操作
+                                docker logout ${HARBOR_URL}
+                                docker system prune -f || true  # 清理无用镜像，释放空间
+                            '
+                        """
                     }
-                    
-                    // 执行并行部署
-                    parallel deployTasks
+                    echo "✅ 部署完成：${server}"
                 }
             }
+            
+            // 执行并行部署
+            parallel deployTasks
         }
     }
+}
 
     // 流水线结束后操作（成功/失败通知）
     post {

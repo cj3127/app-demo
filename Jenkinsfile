@@ -58,7 +58,7 @@ pipeline {
         stage("推送镜像到 Harbor") {
             steps {
                 sh "docker push ${HARBOR_URL}/${HARBOR_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}"
-                sh "docker logout ${HARBOR_URL}"  # 登出 Harbor
+                sh "docker logout ${HARBOR_URL}" 
                 echo "镜像推送完成，可在 Harbor 查看：http://${HARBOR_URL}/${HARBOR_PROJECT}"
             }
         }

@@ -19,7 +19,7 @@
     <description>Spring Boot 应用（适配 CI/CD 流水线 + MySQL + Redis）</description>
 
     <properties>
-        <java.version>11</java.version>
+        <java.version>8</java.version>
         <springdoc.version>1.6.15</springdoc.version> <!-- Swagger 3 依赖版本 -->
     </properties>
 

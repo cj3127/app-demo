@@ -1,5 +1,5 @@
-# 基础镜像（Java 11）
-FROM openjdk:11-jre-slim
+# 基础镜像（Java 8）
+FROM openjdk:8-jre-slim
 
 # 维护者信息
 LABEL maintainer="3127103271@qq.com"

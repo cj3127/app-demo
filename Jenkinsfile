@@ -66,7 +66,7 @@ pipeline {
                 sh "docker push ${HARBOR_URL}/${HARBOR_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}"
                 sh "docker logout ${HARBOR_URL}"  // 登出 Harbor，清理登录状态
                 // 清理 Jenkins 节点旧镜像（避免磁盘占满）
-                sh "docker image prune -f --filter 'reference=${HARBOR_URL}/${HARBOR_PROJECT}/${IMAGE_NAME}:*' --filter 'until=720h'"
+                sh "docker image prune -f --filter 'until=720h'"  // 只清理 30 天前的无用镜像
                 echo "✅ 镜像推送完成，Harbor 查看地址：http://${HARBOR_URL}/${HARBOR_PROJECT}"
             }
         }

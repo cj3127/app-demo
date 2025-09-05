@@ -7,7 +7,7 @@ pipeline {
         HARBOR_PROJECT = "app-demo"
         IMAGE_NAME = "app-demo"
         IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT.substring(0,8)}"
-        APP_SERVERS = ["192.168.121.80", "192.168.121.81"]
+        APP_SERVERS = "192.168.121.80, 192.168.121.81"
     }
     stages {
         // 阶段1：拉取 Git 代码

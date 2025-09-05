@@ -201,8 +201,6 @@ pipeline {
             echo "镜像标签：${IMAGE_TAG}"
             echo "应用访问地址：http://192.168.121.88（Nginx VIP）"
             echo "======================================"
-            // 可选：添加邮件/企业微信通知（需安装对应插件）
-            // emailext to: 'dev-team@example.com', subject: '✅ 构建成功: app-demo #${BUILD_NUMBER}', body: '构建详情: ${BUILD_URL}'
         }
         failure {
             echo "======================================"

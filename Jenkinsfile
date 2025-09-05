@@ -12,6 +12,7 @@ pipeline {
         APP_DEPLOY_DIR = "/opt/app-demo"  // 应用部署目录，统一变量方便维护
     }
     stages {
+        // 前置检查阶段：验证必要工具是否安装
         stage("前置检查阶段") {
             steps {
                 script {
@@ -111,139 +112,87 @@ pipeline {
             }
         }
 
-        // 阶段5：部署到 App 服务器（多节点并行部署，已修复所有问题）
+        // 阶段5：部署到 App 服务器（多节点并行部署）
         stage("部署到 App 服务器") {
             steps {
                 script {
                     echo "开始部署到应用服务器..."
-                    // 分割服务器列表并去重
-                    def servers = APP_SERVERS.split(',').collect { it.trim() }.unique()
+                    // 分割服务器列表为数组并去除空格
+                    def servers = APP_SERVERS.split(',').collect { it.trim() }
+                    
+                    // 修复：将列表转换为 Map，确保 parallel 接收正确格式的参数
                     def deployTasks = [:]
-        
                     servers.each { server ->
                         deployTasks["部署到 ${server}"] = {
                             echo "开始部署到 ${server}..."
                             withCredentials([
-                                // SSH 私钥凭证（对应 Jenkins 中配置的 app-server-ssh）
                                 sshUserPrivateKey(
                                     credentialsId: "app-server-ssh",
                                     keyFileVariable: "SSH_KEY",
                                     usernameVariable: "SSH_USER"
                                 ),
-                                // Harbor 账号凭证（避免变量作用域问题，重新引入）
+                                // 修复：重新引入 Harbor 凭证，避免变量作用域问题
                                 usernamePassword(
                                     credentialsId: "harbor-cred",
                                     usernameVariable: "HARBOR_USER",
                                     passwordVariable: "HARBOR_PWD"
                                 )
                             ]) {
-                                // SSH 远程执行脚本（已修复注释、动态生成 docker-compose.yml）
+                                // SSH 连接目标服务器，执行部署命令
                                 sh """
                                     ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${SSH_USER}@${server} '
-                                        set -e  # 开启错误终止（命令失败直接退出，避免后续无效执行）
-                                        echo "======================================"
-                                        echo "在 ${server} 上执行部署操作"
-                                        echo "======================================"
-        
-                                        # 1. 登录 Harbor（修复：// → # 注释）
-                                        echo "1/7：登录 Harbor..."
-                                        echo ${HARBOR_PWD} | docker login ${HARBOR_URL} -u ${HARBOR_USER} --password-stdin || {
-                                            echo "❌ Harbor 登录失败"; exit 1;
-                                        }
-        
-                                        # 2. 拉取最新镜像（修复：// → # 注释）
-                                        echo "2/7：拉取镜像..."
+                                        echo "在 ${server} 上执行部署操作..."
+                                        
+                                        // 1. 登录 Harbor
+                                        echo ${HARBOR_PWD} | docker login ${HARBOR_URL} -u ${HARBOR_USER} --password-stdin || { echo "❌ Harbor 登录失败"; exit 1; }
+                                        
+                                        // 2. 拉取最新镜像
                                         IMAGE=${HARBOR_URL}/${HARBOR_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}
-                                        echo "目标镜像：\${IMAGE}"
-                                        docker pull \${IMAGE} || {
-                                            echo "❌ 镜像拉取失败"; exit 1;
-                                        }
-        
-                                        # 3. 停止并删除旧容器（修复：// → # 注释）
-                                        echo "3/7：清理旧容器..."
+                                        echo "拉取镜像: \${IMAGE}"
+                                        docker pull \${IMAGE} || { echo "❌ 镜像拉取失败"; exit 1; }
+                                        
+                                        // 3. 停止并删除旧容器（若存在）
+                                        echo "停止并删除旧容器..."
                                         if [ \$(docker ps -q -f name=app-demo) ]; then
-                                            docker stop app-demo && docker rm app-demo || {
-                                                echo "❌ 停止旧容器失败"; exit 1;
-                                            }
-                                        else
-                                            echo "ℹ️  未找到旧容器，跳过清理"
+                                            docker stop app-demo && docker rm app-demo || { echo "❌ 停止/删除旧容器失败"; exit 1; }
                                         fi
-        
-                                        # 4. 生成 docker-compose.yml（核心修复：动态创建配置文件）
-                                        echo "4/7：生成部署配置文件..."
-                                        DEPLOY_DIR=${APP_DEPLOY_DIR}
-                                        mkdir -p \${DEPLOY_DIR} || {
-                                            echo "❌ 创建部署目录失败"; exit 1;
-                                        }
-                                        cd \${DEPLOY_DIR} || {
-                                            echo "❌ 进入部署目录失败"; exit 1;
-                                        }
-        
-                                        # 动态生成配置文件（根据你的应用调整 ports 和参数）
-                                        cat > docker-compose.yml << EOF
-                                   version: "3.8"  # 兼容主流 Docker 版本
-                                   services:
-                                     app-demo:
-                                       image: \${IMAGE}  # 引用拉取的镜像（含标签）
-                                       container_name: app-demo  # 与旧容器名一致，确保清理生效
-                                       ports:
-                                         - "8080:8080"  # 宿主端口:容器端口（必须匹配你的应用端口！）
-                                       restart: always  # 容器异常自动重启，提高可用性
-                                       environment:
-                                         - TZ=Asia/Shanghai  # 可选：设置时区
-                                       logging:  # 可选：限制日志大小，避免磁盘占满
-                                         driver: "json-file"
-                                         options:
-                                           max-size: "100m"
-                                           max-file: "3"
-                                   EOF
-        
-                                        # 验证配置文件是否生成成功
-                                        if [ ! -f docker-compose.yml ]; then
-                                            echo "❌ docker-compose.yml 生成失败"; exit 1;
-                                        else
-                                            echo "ℹ️  配置文件生成成功，内容如下："
-                                            cat docker-compose.yml  # 输出配置文件，便于调试
-                                        fi
-        
-                                        # 5. 启动新容器（修复：// → # 注释）
-                                        echo "5/7：启动新容器..."
-                                        docker-compose up -d || {
-                                            echo "❌ 容器启动失败，查看日志：";
-                                            docker-compose logs --tail=50;  # 输出错误日志，便于排查
-                                            exit 1;
-                                        }
-        
-                                        # 6. 验证容器状态（修复：// → # 注释）
-                                        echo "6/7：验证容器状态..."
-                                        sleep 3  # 等待3秒，避免容器启动延迟导致误判
+                                        
+                                        // 4. 确保部署目录存在
+                                        echo "准备部署目录..."
+                                        mkdir -p ${APP_DEPLOY_DIR} || { echo "❌ 创建部署目录失败"; exit 1; }
+                                        cd ${APP_DEPLOY_DIR} || { echo "❌ 进入部署目录失败"; exit 1; }
+                                        
+                                        // 5. 启动新容器
+                                        echo "启动新容器..."
+                                        IMAGE_TAG=${IMAGE_TAG} docker-compose up -d || { echo "❌ 启动容器失败"; exit 1; }
+                                        
+                                        // 6. 验证容器状态
+                                        echo "验证容器状态..."
                                         if [ \$(docker ps -q -f name=app-demo) ]; then
-                                            echo "✅ 容器启动成功！当前状态："
+                                            echo "✅ 容器启动成功"
                                             docker ps | grep app-demo
                                         else
-                                            echo "❌ 容器启动失败，查看容器日志：";
-                                            docker logs app-demo;
-                                            exit 1;
+                                            echo "❌ 容器启动失败，查看日志:"
+                                            docker logs app-demo
+                                            exit 1
                                         fi
-        
-                                        # 7. 清理操作（修复：// → # 注释）
-                                        echo "7/7：清理资源..."
-                                        docker logout ${HARBOR_URL}  # 登出 Harbor，清除凭证
-                                        docker system prune -f || true  # 清理无用镜像，释放空间
-                                        echo "======================================"
-                                        echo "✅ ${server} 部署完成！"
-                                        echo "======================================"
+                                        
+                                        // 7. 清理操作
+                                        docker logout ${HARBOR_URL}
+                                        docker system prune -f || true  // 清理无用镜像，释放空间
                                     '
                                 """
                             }
+                            echo "✅ 部署完成：${server}"
                         }
                     }
-        
+                    
                     // 执行并行部署
                     parallel deployTasks
                 }
             }
         }
+    }
 
     // 流水线结束后操作（成功/失败通知）
     post {
@@ -253,6 +202,7 @@ pipeline {
             echo "镜像标签：${IMAGE_TAG}"
             echo "应用访问地址：http://192.168.121.88（Nginx VIP）"
             echo "======================================"
+
         }
         failure {
             echo "======================================"
@@ -261,8 +211,10 @@ pipeline {
             echo "构建地址：${BUILD_URL}"
             echo "请查看日志排查问题"
             echo "======================================"
+
         }
         always {
+
             echo "======================================"
             echo "流水线执行结束"
             echo "构建编号：${currentBuild.number}"

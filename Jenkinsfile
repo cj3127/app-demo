@@ -12,7 +12,6 @@ pipeline {
         APP_DEPLOY_DIR = "/opt/app-demo"  // 应用部署目录，统一变量方便维护
     }
     stages {
-        // 前置检查阶段：验证必要工具是否安装
         stage("前置检查阶段") {
             steps {
                 script {
@@ -212,12 +211,8 @@ pipeline {
             echo "构建地址：${BUILD_URL}"
             echo "请查看日志排查问题"
             echo "======================================"
-            // 可选：失败通知
-            // emailext to: 'dev-team@example.com', subject: '❌ 构建失败: app-demo #${BUILD_NUMBER}', body: '构建详情: ${BUILD_URL}'
         }
         always {
-            // 修复1：将 resultTime 改为 endTime（构建结束时间）
-            // 修复2：移除重复的失败提示，保持中立信息
             echo "======================================"
             echo "流水线执行结束"
             echo "构建编号：${currentBuild.number}"

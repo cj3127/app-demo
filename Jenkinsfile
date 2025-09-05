@@ -1,19 +1,19 @@
 pipeline {
-    agent any  // 任意 Jenkins 节点执行（此处为 ci-server）
+    agent any  
     environment {
-        // 全局变量（适配您的环境）
-        GIT_URL = "https://github.com/cj3127/app-demo.git"  // 您的 Git 仓库地址
+        // 全局变量
+        GIT_URL = "https://github.com/cj3127/app-demo.git"  //  Git 仓库地址
         GIT_BRANCH = "main"  // 代码分支
         HARBOR_URL = "192.168.121.210"  // Harbor 地址
         HARBOR_PROJECT = "app-demo"  // Harbor 项目名
         IMAGE_NAME = "app-demo"  // 镜像名
         IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT.substring(0,8)}"  // 镜像标签（构建号+Git 短提交ID）
-        APP_SERVERS = "192.168.121.80,192.168.121.81" // 目标部署节点（移除逗号后空格，避免解析问题）
+        APP_SERVERS = "192.168.121.80,192.168.121.81" // 目标部署节点
         APP_DEPLOY_DIR = "/opt/app-demo"  // 应用部署目录，统一变量方便维护
     }
     stages {
         // 前置检查阶段：验证必要工具是否安装
-        stage("Pre-check") {
+        stage("前置检查阶段") {
             steps {
                 script {
                     echo "检查必要工具是否安装..."

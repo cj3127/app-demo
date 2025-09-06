@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor // 无参构造
 @AllArgsConstructor // 全参构造
 @Entity // 标记为 JPA 实体
-@Table(schema = "`app_demo`",name = "`user`") // 对应数据库表名：user
+@Table(name = "`app_demo`.`user`") // 对应数据库表名：user
 public class User implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -43,5 +43,6 @@ public class User implements Serializable {
     }
 
 }
+
 
 

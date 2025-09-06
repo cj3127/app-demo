@@ -9,10 +9,10 @@ pipeline {
         IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT.substring(0,8)}"
         APP_SERVERS = "192.168.121.80,192.168.121.81"
         APP_BASE_DIR = "/opt/app-demo"
-        CONTAINER_NAME = "app-demo"
+        CONTAINER_NAME = "app-demo"  // Shell中使用的变量，需在引用时转义$
         TARGET_PORT = "8080"
         serverListStr = ""
-        SSH_USER_GLOBAL = "root"  // 提前定义全局SSH用户名（根据实际修改，如admin）
+        SSH_USER_GLOBAL = "root"  // 全局SSH用户名（根据实际修改）
     }
     stages {
         stage("拉取 Git 代码") {
@@ -78,9 +78,8 @@ pipeline {
                             withCredentials([sshUserPrivateKey(
                                 credentialsId: "app-server-ssh",
                                 keyFileVariable: "SSH_KEY",
-                                usernameVariable: "SSH_USER"  // 闭包内局部变量
+                                usernameVariable: "SSH_USER"
                             )]) {
-                                // 核心修复：所有Shell变量加转义，Docker格式加双引号
                                 sh """
                                     ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${SSH_USER}@${server} "
                                         # 1. 拉取镜像
@@ -97,55 +96,51 @@ pipeline {
                                             exit 1;
                                         fi
 
-                                        # 3. 清理旧容器（修复awk命令）
-                                        echo '===== 清理旧容器 ${CONTAINER_NAME} ====='
-                                        if docker ps -a | grep -q ${CONTAINER_NAME}; then
+                                        # 3. 清理旧容器（修复：所有Shell变量加\转义）
+                                        echo '===== 清理旧容器 \${CONTAINER_NAME} ====='  # 注意这里的\转义
+                                        if docker ps -a | grep -q \${CONTAINER_NAME}; then  # 关键修复：\${CONTAINER_NAME}
                                             echo '发现旧容器，强制删除...';
-                                            # 修复：awk '{print $1}' 获取容器ID
-                                            docker ps -a | grep ${CONTAINER_NAME} | awk '{print \$1}' | xargs -I {} docker rm -f {};
+                                            docker ps -a | grep \${CONTAINER_NAME} | awk '{print \$1}' | xargs -I {} docker rm -f {};
                                         fi
                                         cd ${APP_BASE_DIR} || { echo '❌ 部署目录不存在'; exit 1; }
                                         docker-compose down --remove-orphans >/dev/null 2>&1;
-                                        if docker ps -a | grep -q ${CONTAINER_NAME}; then
+                                        if docker ps -a | grep -q \${CONTAINER_NAME}; then  # 关键修复：\${CONTAINER_NAME}
                                             echo '❌ 旧容器清理失败'; exit 1;
                                         fi
 
                                         # 4. 启动新容器
-                                        echo '===== 启动新容器：${CONTAINER_NAME}:${IMAGE_TAG} ====='
+                                        echo '===== 启动新容器：\${CONTAINER_NAME}:${IMAGE_TAG} ====='  # 转义
                                         IMAGE_TAG=${IMAGE_TAG} HARBOR_URL=${HARBOR_URL} HARBOR_PROJECT=${HARBOR_PROJECT} IMAGE_NAME=${IMAGE_NAME} docker-compose up -d || {
                                             echo '❌ docker-compose启动失败'; exit 1;
                                         }
 
-                                        # 5. 验证容器状态（修复变量转义和Docker格式）
+                                        # 5. 验证容器状态（所有Shell变量加\转义）
                                         echo '===== 验证容器状态 ====='
                                         RETRY=5
                                         INTERVAL=3
                                         for ((i=1; i<=RETRY; i++)); do
-                                            # 修复：变量加\转义，格式加双引号
-                                            echo '验证第 \${i}/\${RETRY} 次（间隔\${INTERVAL}秒）';
-                                            # 修复：docker ps --format 加双引号
-                                            docker ps --format "table {{.Names}}\t{{.Status}}" | grep -E "${CONTAINER_NAME}|NAMES";
+                                            echo '验证第 \${i}/\${RETRY} 次（间隔\${INTERVAL}秒）';  # 转义
+                                            docker ps --format "table {{.Names}}\t{{.Status}}" | grep -E "\${CONTAINER_NAME}|NAMES";  # 转义
                                             
-                                            # 修复：格式加双引号，变量加\转义
-                                            if docker ps --format "{{.Names}}|{{.Status}}" | grep -q "^${CONTAINER_NAME}|Up"; then
+                                            if docker ps --format "{{.Names}}|{{.Status}}" | grep -q "^\\${CONTAINER_NAME}|Up"; then  # 注意^后的\\转义
                                                 echo '✅ 容器启动成功';
-                                                docker ps | grep ${CONTAINER_NAME};
+                                                docker ps | grep \${CONTAINER_NAME};  # 转义
                                                 echo '✅ 服务器 ${server} 部署成功';
                                                 exit 0;
                                             fi
                                             
-                                            if docker ps -a --format "{{.Names}}|{{.Status}}" | grep -q "^${CONTAINER_NAME}|Exited"; then
+                                            if docker ps -a --format "{{.Names}}|{{.Status}}" | grep -q "^\\${CONTAINER_NAME}|Exited"; then  # 转义
                                                 echo '❌ 容器启动后退出，日志：';
-                                                docker logs ${CONTAINER_NAME} --tail 30;
+                                                docker logs \${CONTAINER_NAME} --tail 30;  # 转义
                                                 exit 1;
                                             fi
                                             
-                                            sleep \${INTERVAL};
+                                            sleep \${INTERVAL};  # 转义
                                         done
 
                                         # 6. 验证失败处理
                                         echo '❌ 多次重试后容器仍未启动';
-                                        docker logs ${CONTAINER_NAME} --tail 50 2>/dev/null;
+                                        docker logs \${CONTAINER_NAME} --tail 50 2>/dev/null;  # 转义
                                         exit 1;
                                     "
                                 """
@@ -175,7 +170,6 @@ pipeline {
             echo "失败阶段：${currentBuild.currentResult}"
             echo "排查方向："
             echo "1. 检查凭证（git-cred/harbor-cred/app-server-ssh）是否有效"
-            // 修复：使用全局变量 SSH_USER_GLOBAL，避免访问闭包内变量
             echo "2. 检查端口占用：ssh ${SSH_USER_GLOBAL}@192.168.121.80 'ss -tulnp | grep :${TARGET_PORT}'"
             echo "3. 检查容器日志：ssh ${SSH_USER_GLOBAL}@故障服务器 'docker logs ${CONTAINER_NAME} --tail 100'"
             echo "4. 确认 ${APP_BASE_DIR}/docker-compose.yml 配置了 container_name: ${CONTAINER_NAME}"

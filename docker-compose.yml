@@ -9,7 +9,7 @@ services:
       - "8080:8080"  # 宿主机端口:容器端口（与应用端口一致）
     environment:
       # 应用配置（对接现有 MySQL/Redis）?useSSL=false&serverTimezone=UTC&serverTimezone=UTC&allowPublicKeyRetrieval=true
-      - SPRING_DATASOURCE_URL=jdbc:mysql://192.168.121.223:3306/app_demo?useSSL=false&serverTimezone=UTC&serverTimezone=UTC&allowPublicKeyRetrieval=true  
+      - SPRING_DATASOURCE_URL=jdbc:mysql://192.168.121.223:3306/app_demo?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true  
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=123456
       - SPRING_REDIS_HOST=192.168.121.171

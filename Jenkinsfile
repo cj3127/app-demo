@@ -9,9 +9,10 @@ pipeline {
         IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT.substring(0,8)}"
         APP_SERVERS = "192.168.121.80,192.168.121.81"
         APP_BASE_DIR = "/opt/app-demo"
-        CONTAINER_NAME = "app-demo"  // 显式指定容器名（与docker-compose保持一致）
-        TARGET_PORT = "8080"         // 目标端口（与docker-compose端口映射保持一致）
+        CONTAINER_NAME = "app-demo"
+        TARGET_PORT = "8080"
         serverListStr = ""
+        SSH_USER_GLOBAL = "root"  // 提前定义全局SSH用户名（根据实际修改，如admin）
     }
     stages {
         stage("拉取 Git 代码") {
@@ -56,7 +57,7 @@ pipeline {
             steps {
                 sh "docker push ${HARBOR_URL}/${HARBOR_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG} || { echo '❌ 镜像推送失败'; exit 1; }"
                 sh "docker logout ${HARBOR_URL}"
-                sh "docker image prune -f --filter 'until=720h'"  // 清理30天前镜像
+                sh "docker image prune -f --filter 'until=720h'"
                 echo "✅ 镜像推送完成，Harbor地址：http://${HARBOR_URL}/${HARBOR_PROJECT}"
             }
         }
@@ -77,80 +78,75 @@ pipeline {
                             withCredentials([sshUserPrivateKey(
                                 credentialsId: "app-server-ssh",
                                 keyFileVariable: "SSH_KEY",
-                                usernameVariable: "SSH_USER"
+                                usernameVariable: "SSH_USER"  // 闭包内局部变量
                             )]) {
+                                // 核心修复：所有Shell变量加转义，Docker格式加双引号
                                 sh """
                                     ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${SSH_USER}@${server} "
-                                        # 1. 拉取镜像（带详细错误处理）
+                                        # 1. 拉取镜像
                                         echo '===== 拉取镜像：${HARBOR_URL}/${HARBOR_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG} ====='
                                         if ! docker pull ${HARBOR_URL}/${HARBOR_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}; then
-                                            echo '❌ 镜像拉取失败，请检查Harbor地址和镜像标签'
-                                            exit 1
+                                            echo '❌ 镜像拉取失败'; exit 1;
                                         fi
 
-                                        # 2. 预检查：端口是否占用（提前阻断冲突）
+                                        # 2. 检查端口占用
                                         echo '===== 检查端口 ${TARGET_PORT} 是否占用 ====='
-                                        if ss -tulnp | grep -q ":${TARGET_PORT}"; then
-                                            echo '❌ 端口 ${TARGET_PORT} 已被占用，进程信息：'
-                                            ss -tulnp | grep ":${TARGET_PORT}"
-                                            exit 1
+                                        if ss -tulnp | grep -q :${TARGET_PORT}; then
+                                            echo '❌ 端口 ${TARGET_PORT} 已被占用：';
+                                            ss -tulnp | grep :${TARGET_PORT};
+                                            exit 1;
                                         fi
 
-                                        # 3. 彻底清理旧容器（核心修复：覆盖所有状态的容器）
+                                        # 3. 清理旧容器（修复awk命令）
                                         echo '===== 清理旧容器 ${CONTAINER_NAME} ====='
-                                        # 3.1 强制删除所有包含目标名称的容器（无论状态）
-                                        if docker ps -a | grep -q "${CONTAINER_NAME}"; then
-                                            echo '发现旧容器，开始强制删除...'
-                                            docker ps -a | grep "${CONTAINER_NAME}" | awk '{print \$1}' | xargs -I {} docker rm -f {}
+                                        if docker ps -a | grep -q ${CONTAINER_NAME}; then
+                                            echo '发现旧容器，强制删除...';
+                                            # 修复：awk '{print $1}' 获取容器ID
+                                            docker ps -a | grep ${CONTAINER_NAME} | awk '{print \$1}' | xargs -I {} docker rm -f {};
                                         fi
-                                        # 3.2 清理docker-compose残留资源
                                         cd ${APP_BASE_DIR} || { echo '❌ 部署目录不存在'; exit 1; }
-                                        docker-compose down --remove-orphans >/dev/null 2>&1
-                                        # 3.3 验证清理结果
-                                        if docker ps -a | grep -q "${CONTAINER_NAME}"; then
-                                            echo '❌ 旧容器清理失败，存在残留'
-                                            exit 1
+                                        docker-compose down --remove-orphans >/dev/null 2>&1;
+                                        if docker ps -a | grep -q ${CONTAINER_NAME}; then
+                                            echo '❌ 旧容器清理失败'; exit 1;
                                         fi
 
                                         # 4. 启动新容器
                                         echo '===== 启动新容器：${CONTAINER_NAME}:${IMAGE_TAG} ====='
                                         IMAGE_TAG=${IMAGE_TAG} HARBOR_URL=${HARBOR_URL} HARBOR_PROJECT=${HARBOR_PROJECT} IMAGE_NAME=${IMAGE_NAME} docker-compose up -d || {
-                                            echo '❌ docker-compose启动失败'
-                                            exit 1
+                                            echo '❌ docker-compose启动失败'; exit 1;
                                         }
 
-                                        # 5. 带重试的验证逻辑（解决状态刷新延迟）
+                                        # 5. 验证容器状态（修复变量转义和Docker格式）
                                         echo '===== 验证容器状态 ====='
                                         RETRY=5
                                         INTERVAL=3
                                         for ((i=1; i<=RETRY; i++)); do
-                                            echo "验证第 \${i}/\${RETRY} 次（间隔\${INTERVAL}秒）"
-                                            # 打印当前容器状态（方便排查）
-                                            docker ps --format "table {{.Names}}\t{{.Status}}" | grep -E "${CONTAINER_NAME}|NAMES"
+                                            # 修复：变量加\转义，格式加双引号
+                                            echo '验证第 \${i}/\${RETRY} 次（间隔\${INTERVAL}秒）';
+                                            # 修复：docker ps --format 加双引号
+                                            docker ps --format "table {{.Names}}\t{{.Status}}" | grep -E "${CONTAINER_NAME}|NAMES";
                                             
-                                            # 精准判断：容器存在且状态为运行中（Up）
+                                            # 修复：格式加双引号，变量加\转义
                                             if docker ps --format "{{.Names}}|{{.Status}}" | grep -q "^${CONTAINER_NAME}|Up"; then
-                                                echo '✅ 容器启动成功'
-                                                docker ps | grep "${CONTAINER_NAME}"
-                                                echo '✅ 服务器 ${server} 部署成功'
-                                                exit 0
+                                                echo '✅ 容器启动成功';
+                                                docker ps | grep ${CONTAINER_NAME};
+                                                echo '✅ 服务器 ${server} 部署成功';
+                                                exit 0;
                                             fi
                                             
-                                            # 提前检测容器退出状态
                                             if docker ps -a --format "{{.Names}}|{{.Status}}" | grep -q "^${CONTAINER_NAME}|Exited"; then
-                                                echo '❌ 容器启动后立即退出，日志：'
-                                                docker logs "${CONTAINER_NAME}" --tail 30
-                                                exit 1
+                                                echo '❌ 容器启动后退出，日志：';
+                                                docker logs ${CONTAINER_NAME} --tail 30;
+                                                exit 1;
                                             fi
                                             
-                                            sleep \${INTERVAL}
+                                            sleep \${INTERVAL};
                                         done
 
-                                        # 6. 最终验证失败处理
-                                        echo '❌ 多次重试后容器仍未正常启动'
-                                        echo '容器日志（最后50行）：'
-                                        docker logs "${CONTAINER_NAME}" --tail 50 2>/dev/null
-                                        exit 1
+                                        # 6. 验证失败处理
+                                        echo '❌ 多次重试后容器仍未启动';
+                                        docker logs ${CONTAINER_NAME} --tail 50 2>/dev/null;
+                                        exit 1;
                                     "
                                 """
                             }
@@ -179,9 +175,10 @@ pipeline {
             echo "失败阶段：${currentBuild.currentResult}"
             echo "排查方向："
             echo "1. 检查凭证（git-cred/harbor-cred/app-server-ssh）是否有效"
-            echo "2. 目标服务器端口 ${TARGET_PORT} 是否被占用（示例：ssh ${SSH_USER}@192.168.121.80 'ss -tulnp | grep :${TARGET_PORT}'）"
-            echo "3. 目标服务器 ${APP_BASE_DIR}/docker-compose.yml 是否配置了 container_name: ${CONTAINER_NAME}"
-            echo "4. 容器日志：ssh ${SSH_USER}@故障服务器 'docker logs ${CONTAINER_NAME} --tail 100'"
+            // 修复：使用全局变量 SSH_USER_GLOBAL，避免访问闭包内变量
+            echo "2. 检查端口占用：ssh ${SSH_USER_GLOBAL}@192.168.121.80 'ss -tulnp | grep :${TARGET_PORT}'"
+            echo "3. 检查容器日志：ssh ${SSH_USER_GLOBAL}@故障服务器 'docker logs ${CONTAINER_NAME} --tail 100'"
+            echo "4. 确认 ${APP_BASE_DIR}/docker-compose.yml 配置了 container_name: ${CONTAINER_NAME}"
             echo "=================================================="
         }
     }

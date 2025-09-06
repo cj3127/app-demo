@@ -1,8 +1,0 @@
-com\demo\config\SpringDocConfig.class
-com\demo\controller\UserController.class
-com\demo\AppDemoApplication.class
-com\demo\entity\User.class
-com\demo\service\UserService.class
-com\demo\repository\UserRepository.class
-com\demo\config\RedisConfig.class
-com\demo\service\impl\UserServiceImpl.class

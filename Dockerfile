@@ -2,7 +2,7 @@
 FROM openjdk:8-jre-slim
 
 # 维护者信息
-LABEL maintainer="3127103271@qq.com"
+LABEL maintainer="陈俊"
 
 # 复制应用 JAR 包（假设 Maven 构建输出到 target/app-demo.jar）
 COPY target/app-demo.jar /app/app-demo.jar

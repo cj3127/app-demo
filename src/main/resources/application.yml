@@ -12,6 +12,11 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME:root}
     password: ${SPRING_DATASOURCE_PASSWORD:123456}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      # 连接初始化时执行“切换到 app_demo 库”的 SQL
+      connection-init-sql: USE app_demo; 
+      # 验证连接有效性（可选，确保连接可用）
+      connection-test-query: SELECT 1
 
   # 2. JPA 配置（简化数据库操作）
   jpa:
@@ -59,6 +64,7 @@ logging:
   pattern:
 
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n"
+
 
 
 

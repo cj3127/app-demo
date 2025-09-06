@@ -17,7 +17,7 @@ spring:
   # 2. JPA 配置（简化数据库操作）
   jpa:
     hibernate:
-      ddl-auto: none # 禁用自动建表（用 init.sql 手动建表，避免冲突）
+      ddl-auto: update # 禁用自动建表（用 init.sql 手动建表，避免冲突）none
     show-sql: true # 控制台打印 SQL（开发/测试用，生产可关闭）
     properties:
       hibernate:
@@ -62,6 +62,7 @@ logging:
   pattern:
 
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n"
+
 
 
 

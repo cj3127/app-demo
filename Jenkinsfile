@@ -10,7 +10,7 @@ pipeline {
         APP_SERVERS = "192.168.121.80,192.168.121.81"
         APP_BASE_DIR = "/opt/app-demo"
         CONTAINER_NAME = "app-demo"
-        TARGET_PORT = "8080"
+        TARGET_PORT = "8081"
         serverListStr = ""
         SSH_USER_GLOBAL = "root"
     }

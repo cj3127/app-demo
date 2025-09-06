@@ -26,9 +26,13 @@ spring:
   # 3. Redis 配置（环境变量占位符，默认本地 Redis）这里遇到了一个错误，redis是集群，写成了单机连接池
   redis:
     cluster:
-    nodes: ${SPRING_REDIS_CLUSTER_NODES:192.168.121.171:6379,192.168.121.172:6379,192.168.121.173:6379}
-    max-redirects: ${SPRING_REDIS_CLUSTER_MAX_REDIRECTS:3} # 最大重定向次数
-    timeout: ${SPRING_REDIS_CLUSTER_TIMEOUT:5000} # 集群连接超时时间
+      # 节点列表：用逗号分隔多个 "host:port"，或每个节点单独一行（推荐后者，更清晰）
+      nodes:
+        - 192.168.121.171:6379
+        - 192.168.121.172:6379
+        - 192.168.121.173:6379  
+      max-redirects: 3  # 整数类型，无需引号
+      timeout: 5000  # 毫秒，无需引号
     password: ${SPRING_REDIS_PASSWORD:123456} # 若 Redis 无密码，留空
     lettuce:
       pool:
@@ -55,6 +59,7 @@ logging:
   pattern:
 
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n"
+
 
 
 

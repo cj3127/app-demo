@@ -8,7 +8,7 @@ server:
 spring:
   # 1. MySQL 配置（环境变量占位符，由 docker-compose 传递）?useSSL=false&serverTimezone=UTC&serverTimezone=UTC&allowPublicKeyRetrieval=true
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://192.168.121.223:3306/app_demo?useSSL=false&serverTimezone=UTC&serverTimezone=UTC&allowPublicKeyRetrieval=true}
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://192.168.121.188:8066/app_demo?useSSL=false&serverTimezone=UTC&serverTimezone=UTC&allowPublicKeyRetrieval=true}
     username: ${SPRING_DATASOURCE_USERNAME:root}
     password: ${SPRING_DATASOURCE_PASSWORD:123456}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -17,7 +17,7 @@ spring:
   # 2. JPA 配置（简化数据库操作）
   jpa:
     hibernate:
-      ddl-auto: update # 禁用自动建表（用 init.sql 手动建表，避免冲突）
+      ddl-auto: none # 禁用自动建表（用 init.sql 手动建表，避免冲突）
     show-sql: true # 控制台打印 SQL（开发/测试用，生产可关闭）
     properties:
       hibernate:
@@ -33,7 +33,7 @@ spring:
       nodes:
         - 192.168.121.171:6379
         - 192.168.121.172:6379
-        - 192.168.121.173:6379  
+        - 192.168.121.173:6379
       max-redirects: 3  # 整数类型，无需引号
       timeout: 5000  # 毫秒，无需引号
     password: ${SPRING_REDIS_PASSWORD:123456} # 若 Redis 无密码，留空
@@ -62,7 +62,6 @@ logging:
   pattern:
 
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n"
-
 
 
 

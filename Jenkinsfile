@@ -17,11 +17,12 @@ pipeline {
         serverListStr = ""
     }
     
-    // 流水线工具配置
-    tools {
-        maven 'Maven-3.8.6'  // 确保Jenkins已配置此Maven安装
-        jdk 'JDK-8'          // 确保Jenkins已配置此JDK安装
-    }
+    // 移除未配置的工具声明（或替换为Jenkins中已存在的工具名称）
+    // 若需保留，需在Jenkins"全局工具配置"中添加对应名称的Maven和JDK
+    // tools {
+    //     maven 'Maven-3.8.6'
+    //     jdk 'JDK-8'
+    // }
 
     stages {
         stage("拉取 Git 代码") {
@@ -54,8 +55,10 @@ pipeline {
                 failure {
                     echo "❌ Java应用构建失败，请检查代码编译错误或依赖问题"
                 }
-                // 保存构建产物（可选）
-                archiveArtifacts artifacts: "target/${IMAGE_NAME}.jar", fingerprint: true
+                // 修复：将归档步骤放入always块（post块必须包含条件）
+                always {
+                    archiveArtifacts artifacts: "target/${IMAGE_NAME}.jar", fingerprint: true
+                }
             }
         }
 
@@ -248,7 +251,7 @@ pipeline {
             echo "镜像标签：${IMAGE_TAG}"
             echo "Harbor地址：http://${HARBOR_URL}/${HARBOR_PROJECT}"
             echo "部署服务器：${env.serverListStr.split(',').join(', ')}"
-            echo "访问地址：http://${env.serverListStr.split(',')[0]}:8080"  // 假设80端口暴露
+            echo "访问地址：http://${env.serverListStr.split(',')[0]}:8080"
             echo "=================================================="
         }
         failure {
@@ -265,16 +268,9 @@ pipeline {
             echo "5. 查看容器日志：ssh ${env.SSH_USER}@目标IP 'docker logs ${IMAGE_NAME} --tail 100'"
             echo "=================================================="
         }
-        always {
-            // 可选：添加通知机制（邮件、企业微信、Slack等）
-            // 示例：发送企业微信通知
-            // script {
-            //     if (currentBuild.currentResult == 'SUCCESS') {
-            //         sendWechatNotification("构建成功", "流水线执行成功：#${env.BUILD_NUMBER}")
-            //     } else {
-            //         sendWechatNotification("构建失败", "流水线执行失败：#${env.BUILD_NUMBER}")
-            //     }
-            // }
-        }
+        // 移除空的always块（或添加实际步骤如通知）
+        // always {
+        //     echo "流水线执行结束"
+        // }
     }
 }

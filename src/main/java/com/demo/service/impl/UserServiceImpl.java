@@ -22,7 +22,9 @@ public class UserServiceImpl implements UserService {
 
     // 注入数据访问层
     private final UserRepository userRepository;
-
+    public UserServiceImpl(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
     /**
      * 新增用户（无缓存：新增后需清理列表缓存）
      */
@@ -86,7 +88,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Cacheable(value = "userList", key = "'all'", unless = "#result.isEmpty()") // 缓存非空列表
     public List<User> listAll() {
-        return userRepository.findAll();
+        return userRepository.findAllByNativeSql();
     }
 
     /**
@@ -96,4 +98,5 @@ public class UserServiceImpl implements UserService {
     public Optional<User> getByUsername(String username) {
         return userRepository.findByUsername(username);
     }
+
 }

@@ -1,6 +1,6 @@
 # 服务器配置
 server:
-  port: 8081 # 应用端口（与 docker-compose 一致）
+  port: 8080 # 应用端口（与 docker-compose 一致）
   servlet:
     context-path: / # 上下文路径（默认根路径）
 
@@ -53,4 +53,5 @@ logging:
   pattern:
 
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n"
+
 

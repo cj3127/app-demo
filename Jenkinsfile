@@ -10,8 +10,6 @@ pipeline {
         IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT.substring(0,8)}"
         APP_SERVERS = "192.168.121.80,192.168.121.81"
         APP_BASE_DIR = "/opt/app-demo"
-        // 全局存储服务器列表字符串
-        serverListStr = ""
     }
     stages {
         stage("拉取 Git 代码") {
@@ -69,8 +67,7 @@ pipeline {
                     if (serverList.isEmpty()) {
                         error("❌ 部署服务器列表为空，请检查 APP_SERVERS 配置")
                     }
-                    // 存入env全局变量
-                    env.serverListStr = serverList.join(',')
+                    
                     echo "即将部署到 ${serverList.size()} 台服务器：${serverList.join(', ')}"
 
                     // 构建并行部署任务
@@ -137,7 +134,7 @@ pipeline {
             echo "🎉 CI/CD 流水线执行成功！"
             echo "镜像标签：${IMAGE_TAG}"
             echo "Harbor地址：http://${HARBOR_URL}/${HARBOR_PROJECT}"
-            echo "部署服务器：${env.serverListStr.split(',').join(', ')}"
+            echo "部署服务器：${APP_SERVERS}"  // 直接使用环境变量
             echo "=================================================="
         }
         failure {

@@ -23,10 +23,12 @@ spring:
         format_sql: true # 格式化 SQL（便于查看）
     open-in-view: false # 关闭 OpenSessionInView（避免事务问题）
 
-  # 3. Redis 配置（环境变量占位符，默认本地 Redis）
+  # 3. Redis 配置（环境变量占位符，默认本地 Redis）这里遇到了一个错误，redis是集群，写成了单机连接池
   redis:
-    host: ${SPRING_REDIS_HOST:192.168.121.171}
-    port: ${SPRING_REDIS_PORT:6379}
+    cluster:
+    nodes: ${SPRING_REDIS_CLUSTER_NODES:192.168.121.171:6379,192.168.121.172:6379,192.168.121.173:6379}
+    max-redirects: ${SPRING_REDIS_CLUSTER_MAX_REDIRECTS:3} # 最大重定向次数
+    timeout: ${SPRING_REDIS_CLUSTER_TIMEOUT:5000} # 集群连接超时时间
     password: ${SPRING_REDIS_PASSWORD:123456} # 若 Redis 无密码，留空
     lettuce:
       pool:
@@ -53,5 +55,6 @@ logging:
   pattern:
 
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n"
+
 
 

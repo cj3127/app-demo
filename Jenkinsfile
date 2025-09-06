@@ -80,70 +80,71 @@ pipeline {
                                 keyFileVariable: "SSH_KEY",
                                 usernameVariable: "SSH_USER"
                             )]) {
-                                sh """
-                                    ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${SSH_USER}@${server} "
+                                // 核心：用单引号包裹SSH命令，仅对Groovy变量用${}，Shell变量直接用$
+                                sh '''
+                                    ssh -i ''' + SSH_KEY + ''' -o StrictHostKeyChecking=no ''' + SSH_USER + '''@''' + server + ''' '
                                         # 1. 拉取镜像
-                                        echo '===== 拉取镜像：${HARBOR_URL}/${HARBOR_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG} ====='
-                                        if ! docker pull ${HARBOR_URL}/${HARBOR_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}; then
+                                        echo '===== 拉取镜像：''' + HARBOR_URL + '''/''' + HARBOR_PROJECT + '''/''' + IMAGE_NAME + ''':''' + IMAGE_TAG + ''' ====='
+                                        if ! docker pull ''' + HARBOR_URL + '''/''' + HARBOR_PROJECT + '''/''' + IMAGE_NAME + ''':''' + IMAGE_TAG + '''; then
                                             echo '❌ 镜像拉取失败'; exit 1;
                                         fi
 
                                         # 2. 检查端口占用
-                                        echo '===== 检查端口 ${TARGET_PORT} 是否占用 ====='
-                                        if ss -tulnp | grep -q :${TARGET_PORT}; then
-                                            echo '❌ 端口 ${TARGET_PORT} 已被占用：';
-                                            ss -tulnp | grep :${TARGET_PORT};
+                                        echo '===== 检查端口 ''' + TARGET_PORT + ''' 是否占用 ====='
+                                        if ss -tulnp | grep -q :''' + TARGET_PORT + '''; then
+                                            echo '❌ 端口 ''' + TARGET_PORT + ''' 已被占用：';
+                                            ss -tulnp | grep :''' + TARGET_PORT + ''';
                                             exit 1;
                                         fi
 
-                                        # 3. 清理旧容器（关键：用双反斜杠\\转义）
-                                        echo '===== 清理旧容器 \\${CONTAINER_NAME} ====='
-                                        if docker ps -a | grep -q \\${CONTAINER_NAME}; then
+                                        # 3. 清理旧容器（Shell变量直接用$，无需转义）
+                                        echo '===== 清理旧容器 ''' + CONTAINER_NAME + ''' ====='
+                                        if docker ps -a | grep -q ''' + CONTAINER_NAME + '''; then
                                             echo '发现旧容器，强制删除...';
-                                            docker ps -a | grep \\${CONTAINER_NAME} | awk '{print \\$1}' | xargs -I {} docker rm -f {};
+                                            docker ps -a | grep ''' + CONTAINER_NAME + ''' | awk '{print $1}' | xargs -I {} docker rm -f {};
                                         fi
-                                        cd ${APP_BASE_DIR} || { echo '❌ 部署目录不存在'; exit 1; }
+                                        cd ''' + APP_BASE_DIR + ''' || { echo '❌ 部署目录不存在'; exit 1; }
                                         docker-compose down --remove-orphans >/dev/null 2>&1;
-                                        if docker ps -a | grep -q \\${CONTAINER_NAME}; then
+                                        if docker ps -a | grep -q ''' + CONTAINER_NAME + '''; then
                                             echo '❌ 旧容器清理失败'; exit 1;
                                         fi
 
                                         # 4. 启动新容器
-                                        echo '===== 启动新容器：\\${CONTAINER_NAME}:${IMAGE_TAG} ====='
-                                        IMAGE_TAG=${IMAGE_TAG} HARBOR_URL=${HARBOR_URL} HARBOR_PROJECT=${HARBOR_PROJECT} IMAGE_NAME=${IMAGE_NAME} docker-compose up -d || {
+                                        echo '===== 启动新容器：''' + CONTAINER_NAME + ''':''' + IMAGE_TAG + ''' ====='
+                                        IMAGE_TAG=''' + IMAGE_TAG + ''' HARBOR_URL=''' + HARBOR_URL + ''' HARBOR_PROJECT=''' + HARBOR_PROJECT + ''' IMAGE_NAME=''' + IMAGE_NAME + ''' docker-compose up -d || {
                                             echo '❌ docker-compose启动失败'; exit 1;
                                         }
 
-                                        # 5. 验证容器状态（所有Shell变量用\\转义）
+                                        # 5. 验证容器状态（所有变量直接拼接，避免转义冲突）
                                         echo '===== 验证容器状态 ====='
                                         RETRY=5
                                         INTERVAL=3
                                         for ((i=1; i<=RETRY; i++)); do
-                                            echo '验证第 \\${i}/\\${RETRY} 次（间隔\\${INTERVAL}秒）';
-                                            docker ps --format "table {{.Names}}\t{{.Status}}" | grep -E "\\${CONTAINER_NAME}|NAMES";
+                                            echo "验证第 \$i/\$RETRY 次（间隔\$INTERVAL秒）";
+                                            docker ps --format "table {{.Names}}\t{{.Status}}" | grep -E "''' + CONTAINER_NAME + '''|NAMES";
                                             
-                                            if docker ps --format "{{.Names}}|{{.Status}}" | grep -q "^\\\\${CONTAINER_NAME}|Up"; then
+                                            if docker ps --format "{{.Names}}|{{.Status}}" | grep -q "^''' + CONTAINER_NAME + '''|Up"; then
                                                 echo '✅ 容器启动成功';
-                                                docker ps | grep \\${CONTAINER_NAME};
-                                                echo '✅ 服务器 ${server} 部署成功';
+                                                docker ps | grep ''' + CONTAINER_NAME + ''';
+                                                echo '✅ 服务器 ''' + server + ''' 部署成功';
                                                 exit 0;
                                             fi
                                             
-                                            if docker ps -a --format "{{.Names}}|{{.Status}}" | grep -q "^\\\\${CONTAINER_NAME}|Exited"; then
+                                            if docker ps -a --format "{{.Names}}|{{.Status}}" | grep -q "^''' + CONTAINER_NAME + '''|Exited"; then
                                                 echo '❌ 容器启动后退出，日志：';
-                                                docker logs \\${CONTAINER_NAME} --tail 30;
+                                                docker logs ''' + CONTAINER_NAME + ''' --tail 30;
                                                 exit 1;
                                             fi
                                             
-                                            sleep \\${INTERVAL};
+                                            sleep \$INTERVAL;
                                         done
 
                                         # 6. 验证失败处理
                                         echo '❌ 多次重试后容器仍未启动';
-                                        docker logs \\${CONTAINER_NAME} --tail 50 2>/dev/null;
+                                        docker logs ''' + CONTAINER_NAME + ''' --tail 50 2>/dev/null;
                                         exit 1;
-                                    "
-                                """
+                                    '
+                                '''
                             }
                         }
                     }

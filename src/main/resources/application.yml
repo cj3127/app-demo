@@ -6,9 +6,9 @@ server:
 
 # Spring 配置
 spring:
-  # 1. MySQL 配置（环境变量占位符，由 docker-compose 传递）
+  # 1. MySQL 配置（环境变量占位符，由 docker-compose 传递）&allowPublicKeyRetrieval=true
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://192.168.121.223:3306/app_demo?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://192.168.121.223:3306/app_demo?useSSL=false&serverTimezone=UTC}
     username: ${SPRING_DATASOURCE_USERNAME:root}
     password: ${SPRING_DATASOURCE_PASSWORD:123456}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -65,6 +65,7 @@ logging:
   pattern:
 
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n"
+
 
 
 

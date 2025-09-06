@@ -8,7 +8,7 @@ LABEL maintainer="3127103271@qq.com"
 COPY target/app-demo.jar /app/app-demo.jar
 
 # 暴露应用端口（如 8080，需与 docker-compose 一致）
-EXPOSE 8081
+EXPOSE 8080
 
 # 启动命令
 ENTRYPOINT ["java", "-jar", "/app/app-demo.jar"]

@@ -29,30 +29,5 @@ public interface UserService {
     Optional<User> getByUsername(String username);
 
 }
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RestController;
 
-@RestController
-public class ConfigTestController {
 
-    // 打印 Hibernate default_schema 配置
-    @Value("${spring.jpa.properties.hibernate.default_schema:未配置}")
-    private String hibernateDefaultSchema;
-
-    // 打印数据源 URL（确认是否连接到 app_demo 库）
-    @Value("${spring.datasource.url:未配置}")
-    private String dataSourceUrl;
-
-    // 打印 Hikari connection-init-sql 配置
-    @Value("${spring.datasource.hikari.connection-init-sql:未配置}")
-    private String hikariInitSql;
-
-    @GetMapping("/test/config")
-    public String testConfig() {
-        return "运行时配置：\n" +
-                "1. hibernate.default_schema: " + hibernateDefaultSchema + "\n" +
-                "2. 数据源 URL: " + dataSourceUrl + "\n" +
-                "3. hikari.connection-init-sql: " + hikariInitSql;
-    }
-}

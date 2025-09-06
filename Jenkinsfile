@@ -72,51 +72,9 @@ pipeline {
 
                     // 构建并行部署任务
                     def parallelTasks = [:]
-                    for (def server : serverList) {
-                        parallelTasks["部署到 ${server}"] = {
-                            withCredentials([sshUserPrivateKey(
-                                credentialsId: "app-server-ssh",
-                                keyFileVariable: "SSH_KEY",
-                                usernameVariable: "SSH_USER"
-                            )]) {
-                                // 使用更可靠的部署脚本
-                                sh """
-                                    ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${SSH_USER}@${server} '
-                                        # 拉取镜像
-                                        echo "拉取镜像：${HARBOR_URL}/${HARBOR_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}"
-                                        docker pull ${HARBOR_URL}/${HARBOR_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG} || exit 1
-                                        
-                                        # 检查并停止旧容器
-                                        CONTAINER_ID=\$(docker ps -q -f name=${IMAGE_NAME})
-                                        if [ ! -z "\$CONTAINER_ID" ]; then
-                                            echo "停止旧容器：${IMAGE_NAME} (\$CONTAINER_ID)"
-                                            docker stop \$CONTAINER_ID && docker rm \$CONTAINER_ID
-                                        fi
-                                        
-                                        # 启动新容器
-                                        echo "启动新容器：${IMAGE_NAME}:${IMAGE_TAG}"
-                                        cd ${APP_BASE_DIR} || exit 1
-                                        IMAGE_TAG=${IMAGE_TAG} HARBOR_URL=${HARBOR_URL} HARBOR_PROJECT=${HARBOR_PROJECT} IMAGE_NAME=${IMAGE_NAME} docker-compose up -d
-                                        
-                                        # 等待几秒让容器启动
-                                        sleep 5
-                                        
-                                        # 验证部署结果
-                                        NEW_CONTAINER_ID=\$(docker ps -q -f name=${IMAGE_NAME})
-                                        if [ ! -z "\$NEW_CONTAINER_ID" ]; then
-                                            echo "容器状态:"
-                                            docker ps -f name=${IMAGE_NAME}
-                                            echo "✅ 服务器 ${server} 部署成功"
-                                        else
-                                            echo "❌ 服务器 ${server} 部署失败，容器未启动"
-                                            echo "尝试查看日志:"
-                                            docker logs ${IMAGE_NAME} 2>/dev/null || echo "无法获取日志"
-                                            exit 1
-                                        fi
-                                    '
-                                """
-                            }
-                        }
+                    for (int i = 0; i < serverList.size(); i++) {
+                        def server = serverList[i]
+                        parallelTasks["部署到 ${server}"] = getDeploymentTask(server)
                     }
 
                     // 执行并行部署
@@ -134,7 +92,7 @@ pipeline {
             echo "🎉 CI/CD 流水线执行成功！"
             echo "镜像标签：${IMAGE_TAG}"
             echo "Harbor地址：http://${HARBOR_URL}/${HARBOR_PROJECT}"
-            echo "部署服务器：${APP_SERVERS}"  // 直接使用环境变量
+            echo "部署服务器：${APP_SERVERS}"
             echo "=================================================="
         }
         failure {
@@ -148,6 +106,57 @@ pipeline {
             echo "4. 目标服务器是否有 ${APP_BASE_DIR} 目录和docker-compose.yml"
             echo "5. 检查目标服务器上的Docker Compose配置"
             echo "=================================================="
+        }
+    }
+}
+
+// 定义部署任务的方法
+def getDeploymentTask(server) {
+    return {
+        withCredentials([sshUserPrivateKey(
+            credentialsId: "app-server-ssh",
+            keyFileVariable: "SSH_KEY",
+            usernameVariable: "SSH_USER"
+        )]) {
+            // 使用更可靠的部署脚本
+            sh """
+                echo "开始部署到服务器: ${server}"
+                ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${SSH_USER}@${server} '
+                    # 拉取镜像
+                    echo "[${server}] 拉取镜像：${HARBOR_URL}/${HARBOR_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}"
+                    docker pull ${HARBOR_URL}/${HARBOR_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG} || exit 1
+                    
+                    # 检查并停止旧容器
+                    CONTAINER_ID=\$(docker ps -q -f name=${IMAGE_NAME})
+                    if [ ! -z "\$CONTAINER_ID" ]; then
+                        echo "[${server}] 停止旧容器：${IMAGE_NAME} (\$CONTAINER_ID)"
+                        docker stop \$CONTAINER_ID && docker rm \$CONTAINER_ID
+                        # 等待容器完全停止
+                        sleep 2
+                    fi
+                    
+                    # 启动新容器
+                    echo "[${server}] 启动新容器：${IMAGE_NAME}:${IMAGE_TAG}"
+                    cd ${APP_BASE_DIR} || exit 1
+                    IMAGE_TAG=${IMAGE_TAG} HARBOR_URL=${HARBOR_URL} HARBOR_PROJECT=${HARBOR_PROJECT} IMAGE_NAME=${IMAGE_NAME} docker-compose up -d
+                    
+                    # 等待几秒让容器启动
+                    sleep 5
+                    
+                    # 验证部署结果
+                    NEW_CONTAINER_ID=\$(docker ps -q -f name=${IMAGE_NAME})
+                    if [ ! -z "\$NEW_CONTAINER_ID" ]; then
+                        echo "[${server}] 容器状态:"
+                        docker ps -f name=${IMAGE_NAME}
+                        echo "[${server}] ✅ 部署成功"
+                    else
+                        echo "[${server}] ❌ 部署失败，容器未启动"
+                        echo "[${server}] 尝试查看日志:"
+                        docker logs ${IMAGE_NAME} 2>/dev/null || echo "[${server}] 无法获取日志"
+                        exit 1
+                    fi
+                '
+            """
         }
     }
 }

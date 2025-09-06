@@ -14,6 +14,8 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       connection-init-sql: USE app_demo;
+    schema: classpath:db/init.sql
+    initialization-mode: always
   # 2. JPA 配置（简化数据库操作）
   jpa:
     hibernate:
@@ -62,6 +64,7 @@ logging:
   pattern:
 
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n"
+
 
 
 
